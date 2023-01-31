@@ -230,6 +230,11 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration><!-- download from https://github.com/aws-observability/aws-otel-java-instrumentation/releases/latest/download/aws-opentelemetry-agent.jar -->
+          <jvmArguments>
+            -javaagent:/tmp/aws-opentelemetry-agent.jar
+          </jvmArguments>
+        </configuration>
       </plugin>
     </plugins>
   </build>
