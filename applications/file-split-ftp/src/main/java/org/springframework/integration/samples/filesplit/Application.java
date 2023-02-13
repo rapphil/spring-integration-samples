@@ -20,15 +20,26 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.contrib.awsxray.AwsXrayIdGenerator;
+import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
+import io.opentelemetry.extension.aws.AwsXrayPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.apache.commons.net.ftp.FTPFile;
 
+import org.slf4j.bridge.SLF4JBridgeHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.mail.MailProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.integration.config.GlobalChannelInterceptor;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.integration.dsl.Pollers;
@@ -41,13 +52,23 @@ import org.springframework.integration.ftp.dsl.Ftp;
 import org.springframework.integration.ftp.session.DefaultFtpSessionFactory;
 import org.springframework.integration.http.config.EnableIntegrationGraphController;
 import org.springframework.integration.mail.dsl.Mail;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageHeaders;
-import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.*;
+import org.springframework.messaging.support.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 @SpringBootApplication
 @EnableIntegrationGraphController(allowedOrigins = "http://localhost:8082")
 public class Application {
+
+	Logger logger = LoggerFactory.getLogger(Application.class);
+
+	static {
+		// Necessary to enable OpenTelemetry logs that rely on JUL
+		SLF4JBridgeHandler.removeHandlersForRootLogger();
+		SLF4JBridgeHandler.install();
+	}
 
 	private static final String EMAIL_SUCCESS_SUFFIX = "emailSuccessSuffix";
 
@@ -58,6 +79,31 @@ public class Application {
 	@Autowired
 	private MailProperties mailProperties;
 
+	@Bean
+	public OpenTelemetry getOpenTelemetry() {
+		return OpenTelemetrySdk.builder()
+
+				// This will enable your downstream requests to include the X-Ray trace header
+				.setPropagators(
+						ContextPropagators.create(
+								TextMapPropagator.composite(
+										W3CTraceContextPropagator.getInstance(), AwsXrayPropagator.getInstance())))
+
+				// This provides basic configuration of a TracerProvider which generates X-Ray compliant IDs
+				.setTracerProvider(
+						SdkTracerProvider.builder()
+								.addSpanProcessor(
+										SimpleSpanProcessor.create(OtlpGrpcSpanExporter.getDefault()))
+								.setIdGenerator(AwsXrayIdGenerator.getInstance())
+								.build())
+				.buildAndRegisterGlobal();
+	}
+
+	@Bean
+	@GlobalChannelInterceptor(patterns = "*", order = Integer.MIN_VALUE)
+	public ChannelInterceptor getGlobalChannelInterceptor(OpenTelemetry otel) {
+		return new TracingChannelInterceptor(otel);
+	}
 	/**
 	 * Poll for files, add an error channel, split into lines route the start/end markers
 	 * to {@link #markers()} and the lines to {@link #lines}.
