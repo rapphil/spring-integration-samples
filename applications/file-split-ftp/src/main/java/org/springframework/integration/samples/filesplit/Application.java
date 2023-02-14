@@ -21,15 +21,18 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.contrib.awsxray.AwsXrayIdGenerator;
+import io.opentelemetry.contrib.awsxray.propagator.AwsXrayPropagator;
 import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
-import io.opentelemetry.extension.aws.AwsXrayPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import io.opentelemetry.semconv.resource.attributes.ResourceAttributes;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.apache.commons.net.ftp.FTPFile;
 
@@ -81,6 +84,13 @@ public class Application {
 
 	@Bean
 	public OpenTelemetry getOpenTelemetry() {
+		// Name of the service
+		Resource resource = Resource.getDefault().merge(
+				Resource.create(
+						Attributes.of(
+								ResourceAttributes.SERVICE_NAME, "spring-integration"
+						)
+				));
 		return OpenTelemetrySdk.builder()
 
 				// This will enable your downstream requests to include the X-Ray trace header
@@ -95,6 +105,7 @@ public class Application {
 								.addSpanProcessor(
 										SimpleSpanProcessor.create(OtlpGrpcSpanExporter.getDefault()))
 								.setIdGenerator(AwsXrayIdGenerator.getInstance())
+								.setResource(resource)
 								.build())
 				.buildAndRegisterGlobal();
 	}

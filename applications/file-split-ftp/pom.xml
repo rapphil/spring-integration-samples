@@ -61,6 +61,10 @@
     </dependency>
     <dependency>
       <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-semconv</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-exporter-otlp</artifactId>
     </dependency>
     <dependency>
@@ -72,17 +76,14 @@
       <artifactId>opentelemetry-sdk</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.opentelemetry</groupId>
-      <artifactId>opentelemetry-extension-aws</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.opentelemetry</groupId>
-      <artifactId>opentelemetry-sdk-extension-aws</artifactId>
-    </dependency>
-    <dependency>
       <groupId>io.opentelemetry.contrib</groupId>
       <artifactId>opentelemetry-aws-xray</artifactId>
       <version>1.21.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry.contrib</groupId>
+      <artifactId>opentelemetry-aws-xray-propagator</artifactId>
+      <version>1.21.0-alpha</version>
     </dependency>
     <dependency>
       <groupId>io.opentelemetry.instrumentation</groupId>
@@ -300,6 +301,13 @@
         <groupId>io.opentelemetry</groupId>
         <artifactId>opentelemetry-bom</artifactId>
         <version>1.21.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom-alpha</artifactId>
+        <version>1.21.0-alpha</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

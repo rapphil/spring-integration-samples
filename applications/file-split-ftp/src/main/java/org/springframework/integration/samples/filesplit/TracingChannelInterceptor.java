@@ -41,88 +41,58 @@ class TracingChannelInterceptor implements ExecutorChannelInterceptor {
         tracer = otel.getTracer("spring-integration-tracer");
     }
 
-
-    @Override
-    public Message<?> beforeHandle(Message<?> message, MessageChannel channel, MessageHandler handler) {
-        logger.info("**************** beforeHandle " + message.getHeaders());
-        return message;
-    }
-
-    @Override
-    public void afterMessageHandled(Message<?> message, MessageChannel channel, MessageHandler handler, Exception ex) {
-        logger.info("****************** afterMessageHandled " + message.getHeaders());
-    }
-
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
-        logger.info("preSend " + message.getHeaders());
+
+        // Recover context from upstream message
         MessageHeaderAccessor messageHeaderAccessor = createMutableHeaderAccessor(message);
         MessageWithChannel messageWithChannel = MessageWithChannel.create(message, channel);
 
         Context context = propagators.getTextMapPropagator().extract(Context.current(), messageWithChannel, getter);
 
+        // Create new span
         Span span = tracer.spanBuilder(String.format("%s process", messageWithChannel.getChannelName()))
                 .setParent(context)
                 .setSpanKind(SpanKind.PRODUCER)
                 .startSpan();
-
         context = context.with(span);
         Scope scope = span.makeCurrent();
 
         ContextAndScope contextAndScope = ContextAndScope.create(context, scope);
 
+        // Inject context into the next message
         propagators.getTextMapPropagator()
                 .inject(Context.current(), messageHeaderAccessor, MessageHeadersSetter.INSTANCE);
         message = createMessageWithHeaders(message, messageHeaderAccessor);
 
         Map<Message<?>, ContextAndScope> map = LOCAL_CONTEXT_AND_SCOPE.get();
+
+        // Save context and span in thread.local
         map.put(message, contextAndScope);
         return message;
     }
 
     @Override
-    public void postSend(Message<?> message, MessageChannel channel, boolean sent) {
-
-        logger.info("postSend " + message.getHeaders());
-
-    }
-
-    @Override
     public void afterSendCompletion(Message<?> message, MessageChannel channel, boolean sent, Exception ex) {
-        logger.info("afterSendCompletion " + message.getHeaders());
 
+        // Restore context and span from thread.local
         Map<Message<?>, ContextAndScope> map = LOCAL_CONTEXT_AND_SCOPE.get();
         ContextAndScope contextAndScope = map.remove(message);
 
+        // Close scope
         contextAndScope.close();
 
+        // Restore span from context
         Span span = Span.fromContext(contextAndScope.getContext());
 
+        // Register any exceptions
         if (ex != null) {
             span.setStatus(StatusCode.ERROR);
             span.recordException(ex);
         }
 
+        // End of span
         span.end();
-    }
-
-    @Override
-    public boolean preReceive(MessageChannel channel) {
-        logger.info("preReceive " + channel);
-        return ExecutorChannelInterceptor.super.preReceive(channel);
-    }
-
-    @Override
-    public Message<?> postReceive(Message<?> message, MessageChannel channel) {
-        logger.info("postReceive " + message.getHeaders());
-        return message;
-    }
-
-    @Override
-    public void afterReceiveCompletion(Message<?> message, MessageChannel channel, Exception ex) {
-        if (message != null) {
-            logger.info("afterReceiveCompletion " + message.getHeaders());
-        }
     }
 
     private static Message<?> createMessageWithHeaders(
